@@ -157,6 +157,7 @@ class AssemblyIndexBatcher:
                 self.last_call_time = time.time()
 
             result = compute_assembly_index(smiles, prefer=self.method)
+            result["smiles"] = smiles  # Add SMILES for merging
             result["index"] = i
             results.append(result)
 
