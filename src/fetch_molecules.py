@@ -147,24 +147,108 @@ def generate_synthetic_qm9_sample(n_molecules: int = 100, seed: int = 42) -> pd.
     return df
 
 
-def get_qm9_sample(n: int = 100, use_real_data: bool = False, data_dir: str = "data/raw") -> pd.DataFrame:
+def fetch_pubchem_molecules(n: int = 100, max_heavy_atoms: int = 20) -> pd.DataFrame:
     """
-    Get a sample of QM9 molecules for testing.
+    Fetch molecules from PubChem with specified constraints.
+
+    Uses PubChem's REST API to get real, diverse organic molecules.
+
+    Args:
+        n: approximate number of molecules to fetch
+        max_heavy_atoms: max number of heavy atoms per molecule
+
+    Returns:
+        DataFrame with columns: smiles, id, molecular_weight, num_atoms
+    """
+    import requests
+    import time
+
+    print(f"Fetching {n} molecules from PubChem...")
+
+    molecules = []
+    cid = 1  # Start from compound ID 1
+
+    while len(molecules) < n and cid < 10000000:
+        try:
+            # Fetch compound info from PubChem
+            url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{cid}/JSON"
+            response = requests.get(url, timeout=5)
+
+            if response.status_code == 200:
+                data = response.json()
+                props = data['PC_Compounds'][0]
+
+                # Extract SMILES if available
+                try:
+                    atoms = props['atoms']
+                    n_atoms = len(atoms)
+
+                    if n_atoms <= max_heavy_atoms:
+                        # Try to get isomeric SMILES
+                        smiles = None
+                        for prop in props.get('props', []):
+                            if prop['urn']['label'] == 'SMILES' and prop['urn'].get('name') == 'Isomeric':
+                                smiles = prop['value']['sval']
+                                break
+
+                        if smiles:
+                            molecules.append({
+                                'id': f'PubChem_{cid}',
+                                'smiles': smiles,
+                                'num_atoms': n_atoms
+                            })
+
+                            if len(molecules) % 50 == 0:
+                                print(f"  {len(molecules)}/{n} molecules fetched...")
+
+                except Exception:
+                    pass
+
+            cid += 1
+            time.sleep(0.01)  # Rate limiting
+
+        except Exception as e:
+            cid += 1
+            continue
+
+    df = pd.DataFrame(molecules)
+    print(f"Successfully fetched {len(df)} molecules")
+    return df.head(n)
+
+
+def get_qm9_sample(n: int = 500, use_real_data: bool = True, data_dir: str = "data/raw") -> pd.DataFrame:
+    """
+    Get a sample of molecules for testing.
 
     Args:
         n: number of molecules
-        use_real_data: if True, try to download real QM9; if False, use synthetic
+        use_real_data: if True, fetch from PubChem; if False, use synthetic
         data_dir: directory for downloaded data
 
     Returns:
         DataFrame with SMILES
     """
     if use_real_data:
-        qm9_dir = download_qm9_dataset(data_dir)
-        if qm9_dir:
-            df = load_qm9_smiles(qm9_dir)
-            return df.head(n)
+        try:
+            # Try PubChem first (faster, more reliable)
+            df = fetch_pubchem_molecules(n=n)
+            if len(df) > 0:
+                print(f"Using {len(df)} real molecules from PubChem")
+                return df
+        except Exception as e:
+            print(f"PubChem fetch failed: {e}")
+
+        # Fallback to QM9 download
+        try:
+            qm9_dir = download_qm9_dataset(data_dir)
+            if qm9_dir:
+                df = load_qm9_smiles(qm9_dir)
+                if len(df) > 0:
+                    print(f"Using {len(df)} molecules from real QM9 dataset")
+                    return df.head(n)
+        except Exception as e:
+            print(f"QM9 download failed: {e}")
 
     # Fallback to synthetic
-    print(f"Generating synthetic QM9 sample with {n} molecules")
+    print(f"Falling back to synthetic sample with {n} molecules")
     return generate_synthetic_qm9_sample(n)
