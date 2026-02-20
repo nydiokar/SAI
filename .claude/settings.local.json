@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(C:/Users/Cicada38/Projects/math_exp/notebooks/00_sanity_check.ipynb:*)"
+    ]
+  }
+}
