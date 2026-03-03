@@ -6,11 +6,11 @@ WITH PROGRESS LOGGING
 """
 
 import sys
-sys.path.insert(0, '/c/Users/Cicada38/Projects/math_exp')
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import pandas as pd
 import numpy as np
-from pathlib import Path
 import warnings
 import time
 warnings.filterwarnings('ignore')
@@ -23,9 +23,9 @@ print("=" * 70)
 print("BRIDGE 6 PILOT: REAL MOLECULES TEST")
 print("=" * 70)
 
-# Step 1: Fetch real molecules from PubChem
-print("\n[Step 1/6] Fetching real molecules from PubChem...")
-print("Expected time: 2-3 minutes (500 molecules @ 10ms per API call)\n")
+# Step 1: Fetch real molecules (prefer local QM9, then mirrors, then PubChem fallback)
+print("\n[Step 1/6] Loading real molecules (QM9 preferred)...")
+print("Expected time: ~10-30s with local QM9, longer if network fallback is needed\n")
 
 from src.fetch_molecules import get_qm9_sample
 

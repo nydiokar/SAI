@@ -61,8 +61,30 @@ def merge_datasets(
     Returns:
         Merged DataFrame with all columns
     """
-    # Merge symmetry and assembly by SMILES
-    merged = symmetry_df.merge(assembly_df, on="smiles", how="inner")
+    symmetry = symmetry_df.copy().reset_index(drop=True)
+    assembly = assembly_df.copy().reset_index(drop=True)
+
+    # Preserve one-to-one row alignment when duplicate SMILES exist.
+    if len(symmetry) == len(assembly):
+        symmetry["_row_idx"] = symmetry.index
+        assembly["_row_idx"] = assembly.index
+        merged = symmetry.merge(
+            assembly,
+            on=["smiles", "_row_idx"],
+            how="inner",
+            validate="one_to_one",
+        )
+        merged = merged.drop(columns=["_row_idx"])
+    else:
+        symmetry["_smiles_occ"] = symmetry.groupby("smiles").cumcount()
+        assembly["_smiles_occ"] = assembly.groupby("smiles").cumcount()
+        merged = symmetry.merge(
+            assembly,
+            on=["smiles", "_smiles_occ"],
+            how="inner",
+            validate="one_to_one",
+        )
+        merged = merged.drop(columns=["_smiles_occ"])
 
     if properties_df is not None:
         merged = merged.merge(properties_df, on="smiles", how="left")

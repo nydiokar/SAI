@@ -10,6 +10,8 @@ PROFESSIONAL IMPLEMENTATION:
 import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem
+from pymatgen.core import Molecule as PMGMolecule
+from pymatgen.symmetry.analyzer import PointGroupAnalyzer
 
 
 # CCCBDB reference data: known point groups for validation
@@ -44,6 +46,66 @@ def get_3d_coords_from_smiles(smiles: str) -> np.ndarray | None:
         return coords
     except Exception:
         return None
+
+
+def get_3d_conformers_from_smiles(smiles: str, seeds: list[int] | None = None) -> list[tuple[np.ndarray, list[str]]]:
+    """Generate multiple optimized 3D conformers for a molecule."""
+    if seeds is None:
+        seeds = [7, 13, 23, 37, 101]
+
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return []
+
+    mol = Chem.AddHs(mol)
+    symbols = [atom.GetSymbol() for atom in mol.GetAtoms()]
+    conformers: list[tuple[np.ndarray, list[str]]] = []
+
+    for seed in seeds:
+        try:
+            work = Chem.Mol(mol)
+            params = AllChem.ETKDGv3()
+            params.randomSeed = seed
+            params.useRandomCoords = True
+
+            embed_status = AllChem.EmbedMolecule(work, params)
+            if embed_status != 0:
+                continue
+
+            if AllChem.MMFFHasAllMoleculeParams(work):
+                AllChem.MMFFOptimizeMolecule(work)
+            else:
+                AllChem.UFFOptimizeMolecule(work)
+
+            conf = work.GetConformer()
+            coords = np.array([list(conf.GetAtomPosition(i)) for i in range(work.GetNumAtoms())])
+            conformers.append((coords, symbols))
+        except Exception:
+            continue
+
+    return conformers
+
+
+def detect_point_group_pymatgen(coords: np.ndarray, symbols: list[str], tolerance: float = 0.3) -> dict:
+    """Detect point group using pymatgen's symmetry analyzer."""
+    molecule = PMGMolecule(symbols, coords.tolist())
+    analyzer = PointGroupAnalyzer(molecule, tolerance=tolerance)
+
+    point_group = str(analyzer.sch_symbol)
+    order = len(analyzer.get_symmetry_operations())
+    max_rotation_order = int(analyzer.get_rotational_symmetry_number())
+
+    # Confidence proxy based on group order and pymatgen backend reliability.
+    confidence = min(0.99, 0.65 + 0.04 * min(order, 8))
+
+    return {
+        "point_group": point_group,
+        "order": max(order, 1),
+        "max_rotation_order": max(max_rotation_order, 1),
+        "confidence": confidence,
+        "tolerance_used": tolerance,
+        "method": "pymatgen"
+    }
 
 
 def detect_point_group_with_tolerance(
@@ -160,10 +222,6 @@ def compute_point_group(
     Returns:
         dict with point group info, or empty dict if fails
     """
-    coords = get_3d_coords_from_smiles(smiles)
-    if coords is None:
-        return {}
-
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return {}
@@ -171,12 +229,47 @@ def compute_point_group(
     mol = Chem.AddHs(mol)
     symbols = [atom.GetSymbol() for atom in mol.GetAtoms()]
 
+    tolerances = [0.1, 0.3, 0.5, 0.8] if test_tolerances else [tolerance]
+    pymatgen_results = []
+
+    conformers = get_3d_conformers_from_smiles(smiles)
+    if conformers:
+        for conf_idx, (coords, conf_symbols) in enumerate(conformers):
+            for tol in tolerances:
+                try:
+                    result = detect_point_group_pymatgen(coords, conf_symbols, tol)
+                    result["conformer_index"] = conf_idx
+                    pymatgen_results.append(result)
+                except Exception:
+                    continue
+
+    if pymatgen_results:
+        best = max(
+            pymatgen_results,
+            key=lambda r: (
+                r.get("order", 1),
+                r.get("max_rotation_order", 1),
+                r.get("confidence", 0.0),
+                -float(r.get("tolerance_used", tolerance)),
+            ),
+        )
+        best["smiles"] = smiles
+        if test_tolerances:
+            best["all_tolerances"] = pymatgen_results
+        return best
+
+    # Fallback: legacy detector if pymatgen route cannot analyze this molecule.
+    coords = get_3d_coords_from_smiles(smiles)
+    if coords is None:
+        return {}
+
     if test_tolerances:
         # Test multiple tolerances, return most confident
         results = []
-        for tol in [0.1, 0.3, 0.5, 0.8]:
+        for tol in tolerances:
             result = detect_point_group_with_tolerance(coords, symbols, tol)
             result["tolerance_used"] = tol
+            result["method"] = "rdkit_legacy"
             results.append(result)
 
         # Return result with highest confidence
@@ -186,6 +279,7 @@ def compute_point_group(
         return best
     else:
         result = detect_point_group_with_tolerance(coords, symbols, tolerance)
+        result["method"] = "rdkit_legacy"
         result["smiles"] = smiles
         return result
 

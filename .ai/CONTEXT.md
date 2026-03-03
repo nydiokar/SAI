@@ -229,3 +229,43 @@ We need:
 | 20.18 | SCRIPT | Created `run_pilot_v2.py` — Production-ready, awaiting proper geometry source |
 
 **Summary:** P0 100% complete. P1 code ready but blocked on environment. Need Linux + pymatgen + QM9 geometries to proceed reliably.
+
+### 2026-03-03 (Session 4) — WSL Execution, Portability Fixes, and QM9 URL Correction
+
+| ID | Type | Description |
+|:--:|:----:|:------------|
+| 03.01 | ENV | Verified imports in WSL venv: `rdkit`, `pymatgen`, `ase` all import successfully. |
+| 03.02 | FIX | Removed hardcoded Windows repo path from `run_pilot.py`, `run_pilot_v2.py`, `run_pilot_fast.py`. |
+| 03.03 | FIX | Updated `src/compute_symmetry.py` to use `pymatgen PointGroupAnalyzer` with multi-conformer RDKit generation + legacy fallback. |
+| 03.04 | TEST | `run_pilot_v2.py` now yields diverse groups (14 unique), not only `C1/Cs`; output is now meaningful for P1. |
+| 03.05 | FIX | Added fail-fast controls to PubChem fetch (`max_seconds`, `max_consecutive_errors`) to avoid long hangs. |
+| 03.06 | FIX | Corrected merge inflation bug in `src/merge_datasets.py` (duplicate SMILES no longer cause cartesian row explosion). |
+| 03.07 | TEST | `run_pilot.py` now completes reliably; fallback synthetic run reports correct `n=500` after merge fix. |
+| 03.08 | DIAG | Confirmed legacy QM9 URL `https://quantum-machine.org/datasets/qm9.tar.gz` now returns **404** (obsolete). |
+| 03.09 | FIX | Updated QM9 downloader in `src/fetch_molecules.py` to modern mirrors: DeepChem zip (primary) + Figshare file mirror (fallback). |
+
+**Current Blocker (as of 2026-03-03):**
+- External data acquisition can still fail due network/DNS/remote mirror availability.
+- This is no longer a code-path blocker in pilots; it is now an external download reliability issue.
+
+**Current Status:**
+- P1 execution pipeline is unblocked and producing meaningful results on curated/synthetic datasets.
+- Full "real QM9" run depends on successfully downloading current QM9 artifacts from active mirrors.
+
+### 2026-03-03 (Session 5) — First Real-QM9 Pilot Success
+
+| ID | Type | Description |
+|:--:|:----:|:------------|
+| 03.10 | DATA | Downloaded QM9 mirror archive: `data/raw/qm9.zip` (~43MB, includes `gdb9.sdf` + `gdb9.sdf.csv`). |
+| 03.11 | FIX | Updated loader to prioritize local QM9 and parse SDF when SMILES columns are absent in CSV. |
+| 03.12 | FIX | Reordered data-source priority: local QM9 -> QM9 mirror download -> PubChem -> synthetic fallback. |
+| 03.13 | TEST | Ran `run_pilot.py` using local QM9-derived molecules (no PubChem dependency). |
+| 03.14 | RESULT | P1 pilot (`n=500`) produced **16 point groups**, Spearman **ρ=-0.1931**, **p=0.000014** (significant, negative correlation). |
+
+**Interpretation (current):**
+- P1 is no longer blocked.
+- Initial signal exists: higher symmetry order tends to associate with lower MA in this pilot subset.
+- Effect size is modest; scale-up on larger QM9 subsets is the next validation step.
+
+**Immediate Next Step:**
+- Run larger sample (e.g., 5k-10k QM9 molecules) to verify stability of ρ and p-value.

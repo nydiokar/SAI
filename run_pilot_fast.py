@@ -5,11 +5,11 @@ No API calls. Just real, diverse molecules with known varied symmetries.
 """
 
 import sys
-sys.path.insert(0, '/c/Users/Cicada38/Projects/math_exp')
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import pandas as pd
 import numpy as np
-from pathlib import Path
 import warnings
 import time
 warnings.filterwarnings('ignore')

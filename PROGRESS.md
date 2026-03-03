@@ -195,11 +195,29 @@ Then examine:
 ## References & Resources
 
 - **Assembly Theory**: Marshall et al. (2021) *Nature Commun.* 12, 3033
-- **QM9 Dataset**: quantum-machine.org/datasets/
+- **QM9 Dataset (legacy page, old link stale)**: quantum-machine.org/datasets/
+- **QM9 Mirrors (current working candidates)**:
+  - https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/molnet_publish/qm9.zip
+  - https://springernature.figshare.com/ndownloader/files/3195389
 - **RDKit Docs**: rdkit.org
 - **DaymudeLab Assembly-Theory**: github.com/DaymudeLab/assembly-theory
 - **Molecular-Assembly API**: molecular-assembly.com
 - **Group Theory**: Holt et al. (2005) *Handbook of Computational Group Theory*
+
+---
+
+## Session Update (2026-03-03)
+
+- Verified WSL `.venv` imports: `rdkit`, `pymatgen`, `ase` all OK.
+- Removed Windows-only hardcoded paths in all `run_pilot*.py` scripts.
+- Upgraded symmetry detection to pymatgen-backed path with multi-conformer handling.
+- Added PubChem fail-fast logic so pilot script does not hang indefinitely.
+- Fixed merge bug that inflated rows when duplicate SMILES existed.
+- Re-ran pilots:
+  - `run_pilot_v2.py`: meaningful symmetry diversity (14 point groups).
+  - `run_pilot_fast.py`: significant signal detected on curated set.
+  - `run_pilot.py`: now completes quickly with fallback and correct sample count.
+- Confirmed `qm9.tar.gz` legacy URL returns 404; downloader updated to modern mirrors.
 
 ---
 

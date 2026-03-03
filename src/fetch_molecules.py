@@ -5,6 +5,7 @@ import gzip
 import pandas as pd
 import numpy as np
 from pathlib import Path
+import zipfile
 
 
 def download_qm9_dataset(data_dir: str = "data/raw", force: bool = False) -> str:
@@ -24,24 +25,56 @@ def download_qm9_dataset(data_dir: str = "data/raw", force: bool = False) -> str
     data_path = Path(data_dir)
     data_path.mkdir(parents=True, exist_ok=True)
 
-    qm9_url = "http://quantum-machine.org/datasets/qm9.tar.gz"
-    tar_path = data_path / "qm9.tar.gz"
+    # Current public mirrors used by ML tooling for QM9.
+    qm9_zip_url = "https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/molnet_publish/qm9.zip"
+    qm9_tar_url = "https://springernature.figshare.com/ndownloader/files/3195389"
+    zip_path = data_path / "qm9.zip"
+    tar_path = data_path / "qm9.tar.bz2"
     extract_path = data_path / "qm9"
 
     if extract_path.exists() and not force:
         print(f"QM9 dataset already exists at {extract_path}")
         return str(extract_path)
 
-    print(f"Downloading QM9 dataset from {qm9_url}...")
+    if force and extract_path.exists():
+        for p in extract_path.iterdir():
+            if p.is_file():
+                p.unlink()
+
+    if zip_path.exists() and not force:
+        try:
+            print(f"Found local archive at {zip_path}, extracting...")
+            extract_path.mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                zf.extractall(path=extract_path)
+            print("Done!")
+            return str(extract_path)
+        except Exception as e:
+            print(f"Local archive extraction failed: {e}")
+
+    print(f"Downloading QM9 dataset from {qm9_zip_url}...")
     try:
-        urllib.request.urlretrieve(qm9_url, tar_path)
+        urllib.request.urlretrieve(qm9_zip_url, zip_path)
         print(f"Extracting to {extract_path}...")
-        with tarfile.open(tar_path, "r:gz") as tar:
-            tar.extractall(path=data_path)
+        extract_path.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            zf.extractall(path=extract_path)
         print("Done!")
         return str(extract_path)
     except Exception as e:
-        print(f"Download failed: {e}")
+        print(f"Primary QM9 download failed: {e}")
+
+    print(f"Trying fallback QM9 mirror from {qm9_tar_url}...")
+    try:
+        urllib.request.urlretrieve(qm9_tar_url, tar_path)
+        print(f"Extracting to {extract_path}...")
+        extract_path.mkdir(parents=True, exist_ok=True)
+        with tarfile.open(tar_path, "r:bz2") as tar:
+            tar.extractall(path=extract_path)
+        print("Done!")
+        return str(extract_path)
+    except Exception as e:
+        print(f"Fallback download failed: {e}")
         print("Falling back to synthetic dataset generation.")
         return None
 
@@ -58,35 +91,87 @@ def load_qm9_smiles(qm9_dir: str) -> pd.DataFrame:
     """
     qm9_path = Path(qm9_dir)
 
-    # QM9 stores data as individual .xyz files
-    # This is a parser for the standard format
+    # Preferred: parse CSV shipped by common QM9 mirrors.
+    csv_candidates = list(qm9_path.glob("**/*.csv"))
+    for csv_file in csv_candidates:
+        try:
+            df = pd.read_csv(csv_file)
+            lower_cols = {c.lower(): c for c in df.columns}
+            smiles_col = None
+            for candidate in ["smiles", "smiles1", "smiles_relaxed"]:
+                if candidate in lower_cols:
+                    smiles_col = lower_cols[candidate]
+                    break
+            if smiles_col is None:
+                continue
+
+            out = pd.DataFrame({
+                "id": df.index.astype(str),
+                "smiles": df[smiles_col].astype(str)
+            })
+            out = out[out["smiles"].notna() & (out["smiles"].str.len() > 0)]
+            if len(out) > 0:
+                print(f"Loaded {len(out)} molecules from {csv_file.name}")
+                return out.reset_index(drop=True)
+        except Exception:
+            continue
+
+    # Fallback: parse XYZ metadata if available.
     smiles_list = []
     ids = []
-
     xyz_files = sorted(qm9_path.glob("**/*.xyz"))
-    print(f"Found {len(xyz_files)} molecules in QM9")
+    print(f"Found {len(xyz_files)} XYZ files in QM9")
 
-    for xyz_file in xyz_files[:10000]:  # Limit to first 10k for testing
+    for xyz_file in xyz_files[:10000]:
         try:
-            # Read first line of .xyz file (contains SMILES in some versions)
-            with open(xyz_file, 'r') as f:
+            with open(xyz_file, "r") as f:
                 lines = f.readlines()
-                # QM9 format: first line is atom count, second line often has metadata
                 if len(lines) > 1:
-                    # Try to extract SMILES from metadata line
                     metadata = lines[1].strip()
-                    # This is dataset-specific—adjust parsing as needed
                     smiles_list.append(metadata)
                     ids.append(xyz_file.stem)
         except Exception:
             continue
 
-    df = pd.DataFrame({
-        'id': ids,
-        'smiles': smiles_list
-    })
+    df = pd.DataFrame({"id": ids, "smiles": smiles_list})
+    df = df[df["smiles"].notna()].reset_index(drop=True)
+    if len(df) > 0:
+        return df
 
-    return df[df['smiles'].notna()].reset_index(drop=True)
+    # Fallback: parse SDF and generate canonical SMILES.
+    sdf_candidates = list(qm9_path.glob("**/*.sdf"))
+    for sdf_file in sdf_candidates:
+        try:
+            from rdkit import Chem
+            from rdkit import RDLogger
+            RDLogger.DisableLog("rdApp.error")
+
+            out_ids = []
+            out_smiles = []
+            supplier = Chem.SDMolSupplier(str(sdf_file), removeHs=False, sanitize=False)
+            for idx, mol in enumerate(supplier):
+                if mol is None:
+                    continue
+                try:
+                    Chem.SanitizeMol(mol)
+                except Exception:
+                    continue
+                smiles = Chem.MolToSmiles(mol, canonical=True)
+                if not smiles:
+                    continue
+                name = mol.GetProp("_Name") if mol.HasProp("_Name") else f"mol_{idx}"
+                out_ids.append(name)
+                out_smiles.append(smiles)
+
+            out = pd.DataFrame({"id": out_ids, "smiles": out_smiles})
+            out = out[out["smiles"].notna() & (out["smiles"].str.len() > 0)]
+            if len(out) > 0:
+                print(f"Loaded {len(out)} molecules from {sdf_file.name}")
+                return out.reset_index(drop=True)
+        except Exception:
+            continue
+
+    return pd.DataFrame(columns=["id", "smiles"])
 
 
 def generate_synthetic_qm9_sample(n_molecules: int = 100, seed: int = 42) -> pd.DataFrame:
@@ -147,7 +232,12 @@ def generate_synthetic_qm9_sample(n_molecules: int = 100, seed: int = 42) -> pd.
     return df
 
 
-def fetch_pubchem_molecules(n: int = 100, max_heavy_atoms: int = 20) -> pd.DataFrame:
+def fetch_pubchem_molecules(
+    n: int = 100,
+    max_heavy_atoms: int = 20,
+    max_seconds: int = 90,
+    max_consecutive_errors: int = 80,
+) -> pd.DataFrame:
     """
     Fetch molecules from PubChem with specified constraints.
 
@@ -167,8 +257,17 @@ def fetch_pubchem_molecules(n: int = 100, max_heavy_atoms: int = 20) -> pd.DataF
 
     molecules = []
     cid = 1  # Start from compound ID 1
+    start_time = time.time()
+    consecutive_errors = 0
 
     while len(molecules) < n and cid < 10000000:
+        if (time.time() - start_time) > max_seconds:
+            print(f"PubChem fetch timed out after {max_seconds}s; falling back.")
+            break
+        if consecutive_errors >= max_consecutive_errors:
+            print(f"PubChem fetch hit {max_consecutive_errors} consecutive failures; falling back.")
+            break
+
         try:
             # Fetch compound info from PubChem
             url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{cid}/JSON"
@@ -177,6 +276,7 @@ def fetch_pubchem_molecules(n: int = 100, max_heavy_atoms: int = 20) -> pd.DataF
             if response.status_code == 200:
                 data = response.json()
                 props = data['PC_Compounds'][0]
+                consecutive_errors = 0
 
                 # Extract SMILES if available
                 try:
@@ -202,12 +302,15 @@ def fetch_pubchem_molecules(n: int = 100, max_heavy_atoms: int = 20) -> pd.DataF
                                 print(f"  {len(molecules)}/{n} molecules fetched...")
 
                 except Exception:
-                    pass
+                    consecutive_errors += 1
+            else:
+                consecutive_errors += 1
 
             cid += 1
             time.sleep(0.01)  # Rate limiting
 
-        except Exception as e:
+        except Exception:
+            consecutive_errors += 1
             cid += 1
             continue
 
@@ -229,16 +332,18 @@ def get_qm9_sample(n: int = 500, use_real_data: bool = True, data_dir: str = "da
         DataFrame with SMILES
     """
     if use_real_data:
+        # 1) Prefer local/extracted QM9 if present.
         try:
-            # Try PubChem first (faster, more reliable)
-            df = fetch_pubchem_molecules(n=n)
-            if len(df) > 0:
-                print(f"Using {len(df)} real molecules from PubChem")
-                return df
+            local_qm9_dir = Path(data_dir) / "qm9"
+            if local_qm9_dir.exists():
+                df = load_qm9_smiles(str(local_qm9_dir))
+                if len(df) > 0:
+                    print(f"Using {len(df)} molecules from local QM9 dataset")
+                    return df.head(n)
         except Exception as e:
-            print(f"PubChem fetch failed: {e}")
+            print(f"Local QM9 read failed: {e}")
 
-        # Fallback to QM9 download
+        # 2) Try to download/extract QM9 mirrors.
         try:
             qm9_dir = download_qm9_dataset(data_dir)
             if qm9_dir:
@@ -248,6 +353,15 @@ def get_qm9_sample(n: int = 500, use_real_data: bool = True, data_dir: str = "da
                     return df.head(n)
         except Exception as e:
             print(f"QM9 download failed: {e}")
+
+        # 3) Last resort: PubChem.
+        try:
+            df = fetch_pubchem_molecules(n=n)
+            if len(df) > 0:
+                print(f"Using {len(df)} real molecules from PubChem")
+                return df
+        except Exception as e:
+            print(f"PubChem fetch failed: {e}")
 
     # Fallback to synthetic
     print(f"Falling back to synthetic sample with {n} molecules")
