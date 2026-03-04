@@ -168,7 +168,7 @@ print(f"\n[Step 3/6] Computing assembly indices...")
 from src.compute_assembly import AssemblyIndexBatcher
 
 start_time = time.time()
-batcher = AssemblyIndexBatcher(method='heuristic', delay_seconds=0.0)
+batcher = AssemblyIndexBatcher(method='exact', timeout_seconds=3, delay_seconds=0.0)
 assembly_results = batcher.compute_batch(df_symmetry['smiles'].tolist())
 
 df_assembly = pd.DataFrame(assembly_results)

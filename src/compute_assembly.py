@@ -1,167 +1,95 @@
-"""Compute molecular assembly index.
+"""Exact molecular Assembly Index (MA) computation utilities."""
 
-Strategy:
-1. Try to use DaymudeLab/assembly-theory if installed
-2. Fallback to molecular-assembly.com API
-3. Fallback to simple placeholder based on molecular complexity
-"""
+from __future__ import annotations
 
-import requests
+import signal
 import time
+from dataclasses import dataclass
+
 from rdkit import Chem
 
 
-def compute_ma_via_assembly_theory(smiles: str) -> dict:
-    """Compute MA using local assembly-theory package (if installed)."""
+class ExactMATimeoutError(Exception):
+    """Raised when an exact MA call exceeds the configured timeout."""
+
+
+def _timeout_handler(signum, frame):
+    raise ExactMATimeoutError("exact_ma_timeout")
+
+
+def compute_ma_exact(smiles: str, timeout_seconds: int = 3) -> dict:
+    """
+    Compute exact MA via DaymudeLab's `assembly-theory` package.
+
+    Returns a dict with standardized status fields.
+    """
     try:
-        import assembly_theory
-        # This is a placeholder—actual implementation depends on API
-        ma = assembly_theory.compute_assembly_index(smiles)
-        return {"assembly_index": ma, "source": "assembly_theory_local", "success": True}
+        import assembly_theory as at
     except ImportError:
-        return {"success": False, "source": "assembly_theory_local", "error": "not installed"}
-    except Exception as e:
-        return {"success": False, "source": "assembly_theory_local", "error": str(e)}
+        return {"success": False, "source": "assembly_theory_exact", "error": "not_installed"}
 
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return {"success": False, "source": "assembly_theory_exact", "error": "invalid_smiles"}
 
-def compute_ma_via_api(smiles: str, timeout: int = 10) -> dict:
-    """
-    Query molecular-assembly.com API for precomputed MA values.
+    mol_block = Chem.MolToMolBlock(mol)
 
-    Note: This requires internet and respects rate limits.
-    """
+    old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
+    signal.alarm(max(int(timeout_seconds), 1))
     try:
-        url = "https://molecular-assembly.com/api/ma"
-        params = {"smiles": smiles}
-        response = requests.get(url, params=params, timeout=timeout)
+        ma = int(at.index(mol_block))
+    except ExactMATimeoutError:
+        return {"success": False, "source": "assembly_theory_exact", "error": "timeout"}
+    except Exception as exc:
+        return {"success": False, "source": "assembly_theory_exact", "error": str(exc)}
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
 
-        if response.status_code == 200:
-            data = response.json()
-            return {
-                "assembly_index": data.get("assembly_index"),
-                "source": "molecular_assembly_api",
-                "success": True
-            }
-        else:
-            return {
-                "success": False,
-                "source": "molecular_assembly_api",
-                "error": f"HTTP {response.status_code}"
-            }
-    except requests.exceptions.RequestException as e:
+    # `assembly_theory` can return u32::MAX as an invalid sentinel.
+    if ma >= (2**32 - 1):
+        return {"success": False, "source": "assembly_theory_exact", "error": "invalid_or_overflow"}
+
+    return {"assembly_index": ma, "source": "assembly_theory_exact", "success": True}
+
+
+def compute_assembly_index(smiles: str, prefer: str = "exact", timeout_seconds: int = 3) -> dict:
+    """
+    Compute MA with exact algorithm only.
+
+    `prefer` is kept for backward compatibility but only `"exact"` is accepted.
+    """
+    if prefer != "exact":
         return {
             "success": False,
-            "source": "molecular_assembly_api",
-            "error": str(e)
+            "source": "assembly_theory_exact",
+            "error": f"unsupported_method:{prefer}",
         }
+    return compute_ma_exact(smiles, timeout_seconds=timeout_seconds)
 
 
-def compute_ma_simple_heuristic(smiles: str) -> dict:
-    """
-    Simple heuristic assembly index based on molecular complexity.
-
-    For testing only. Real MA computation requires proper algorithm.
-
-    Formula: MA ≈ log2(num_atoms) + num_rings + num_bonds_complexity
-    This is NOT a real assembly index, just a complexity proxy.
-    """
-    try:
-        mol = Chem.MolFromSmiles(smiles)
-        if mol is None:
-            return {"success": False, "source": "heuristic", "error": "invalid SMILES"}
-
-        mol = Chem.AddHs(mol)
-        num_atoms = mol.GetNumAtoms()
-        num_bonds = mol.GetNumBonds()
-        num_rings = Chem.GetSSSR(mol).__len__()
-
-        # Simple heuristic (not real MA)
-        complexity = (
-            1 + np.log2(max(num_atoms, 2)) +
-            num_rings +
-            (num_bonds - num_atoms + 1) * 0.5
-        )
-
-        return {
-            "assembly_index": round(complexity, 2),
-            "source": "heuristic_simple",
-            "success": True,
-            "num_atoms": num_atoms,
-            "num_bonds": num_bonds,
-            "num_rings": num_rings,
-            "note": "Heuristic only—not real assembly index"
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "source": "heuristic_simple",
-            "error": str(e)
-        }
-
-
-def compute_assembly_index(smiles: str, prefer: str = "api") -> dict:
-    """
-    Compute molecular assembly index with fallback strategy.
-
-    Args:
-        smiles: SMILES string
-        prefer: "api" (try API first), "local" (try local first), or "heuristic" (use only heuristic)
-
-    Returns:
-        dict with assembly_index, source, and success flag
-    """
-    if prefer == "local":
-        result = compute_ma_via_assembly_theory(smiles)
-        if result["success"]:
-            return result
-        result = compute_ma_via_api(smiles)
-        if result["success"]:
-            return result
-    elif prefer == "api":
-        result = compute_ma_via_api(smiles)
-        if result["success"]:
-            return result
-        result = compute_ma_via_assembly_theory(smiles)
-        if result["success"]:
-            return result
-    elif prefer == "heuristic":
-        return compute_ma_simple_heuristic(smiles)
-
-    # Final fallback
-    return compute_ma_simple_heuristic(smiles)
-
-
-# For batch operations with rate limiting
+@dataclass
 class AssemblyIndexBatcher:
-    """Batch compute MA with rate limiting for API calls."""
+    """Batch exact MA computation with optional per-call timeout."""
 
-    def __init__(self, method: str = "heuristic", delay_seconds: float = 0.1):
-        """
-        Args:
-            method: "api", "local", or "heuristic"
-            delay_seconds: delay between API calls
-        """
-        self.method = method
-        self.delay = delay_seconds
-        self.last_call_time = 0
+    method: str = "exact"
+    timeout_seconds: int = 3
+    delay_seconds: float = 0.0
 
     def compute_batch(self, smiles_list: list[str]) -> list[dict]:
-        """Compute MA for multiple SMILES with rate limiting."""
+        if self.method != "exact":
+            raise ValueError(f"Unsupported method '{self.method}'. Use 'exact'.")
+
         results = []
         for i, smiles in enumerate(smiles_list):
-            if self.method == "api":
-                # Rate limiting for API
-                elapsed = time.time() - self.last_call_time
-                if elapsed < self.delay:
-                    time.sleep(self.delay - elapsed)
-                self.last_call_time = time.time()
-
-            result = compute_assembly_index(smiles, prefer=self.method)
-            result["smiles"] = smiles  # Add SMILES for merging
+            if self.delay_seconds > 0:
+                time.sleep(self.delay_seconds)
+            result = compute_assembly_index(
+                smiles,
+                prefer="exact",
+                timeout_seconds=self.timeout_seconds,
+            )
+            result["smiles"] = smiles
             result["index"] = i
             results.append(result)
-
         return results
-
-
-import numpy as np

@@ -269,3 +269,61 @@ We need:
 
 **Immediate Next Step:**
 - Run larger sample (e.g., 5k-10k QM9 molecules) to verify stability of ρ and p-value.
+
+### 2026-03-03 (Session 6) — Robustness / Sanity Phase Before Full-Scale Claim
+
+| ID | Type | Description |
+|:--:|:----:|:------------|
+| 03.15 | SCALE | Added checkpointed scaler `run_scale_qm9.py` and ran 20k target (`19480` valid rows). |
+| 03.16 | RESULT | 20k-scale summary: **ρ=-0.164517**, **p=3.05e-118**, `point_groups=20`, `orders=10`. |
+| 03.17 | SANITY | Added `run_sanity_checks.py` for robustness diagnostics (bootstrap CI, label cleaning, partial correlation, size-bin stability, optional API benchmark). |
+| 03.18 | SANITY | Sanity report on 5k set: baseline ρ=-0.1925; partial (size/complexity controlled) r=-0.1382; effect remains negative/significant. |
+| 03.19 | SANITY | Sanity report on 20k set: baseline ρ=-0.1645; partial (size/complexity controlled) r=-0.1594; effect remains negative/significant. |
+| 03.20 | DIAG | Tried heuristic-vs-API benchmark (`molecular-assembly.com` endpoint currently returns no usable matches in this environment / endpoint likely stale). |
+
+**Current Interpretation (scientific):**
+- The negative association appears **stable across sample size, cleaning, and basic confound controls**.
+- Effect size remains **modest**, not dominant.
+- Core remaining risk is **proxy fidelity**:
+  - MA values are still heuristic, not guaranteed to match canonical Assembly Index values from original method.
+  - Some symmetry labels remain noisy/rare in long tails, though not driving the main result.
+
+**Decision Gate Before Final 130k Claim:**
+1. Full 130k run is useful and technically ready (checkpointed) for high-confidence effect-size estimate.
+2. But final scientific wording should remain cautious until MA proxy is benchmarked against a trusted MA source on a representative subset.
+
+### 2026-03-03 (Session 7) — Exact MA Benchmark Changes Interpretation
+
+| ID | Type | Description |
+|:--:|:----:|:------------|
+| 03.21 | TOOL | Installed `assembly-theory==0.6.1` (DaymudeLab exact MA implementation). |
+| 03.22 | VALID | Verified canonical references via exact MA: aspirin=8, anthracene=6, ethanol=1 (matches published examples). |
+| 03.23 | FIX | Added exact-MA path in `src/compute_assembly.py` (`source=assembly_theory_exact`) and wired `prefer='exact'`. |
+| 03.24 | BENCH | Exact-vs-heuristic benchmark (QM9 subset 2000): weak agreement (`ρ≈0.05`), indicating substantial proxy mismatch. |
+| 03.25 | BENCH | MA-vs-symmetry on exact MA (subset 5000 from 20k symmetry pool): small **positive** effect (`ρ≈+0.056`, p<1e-4), opposite sign to heuristic pipeline. |
+| 03.26 | RISK | Attempted full 20k exact MA encountered long-tail hard molecules; exact call can stall on rare cases without robust process-level timeout. |
+
+**Updated Interpretation:**
+- The heuristic MA proxy is not reliable enough for directional claims (it can flip effect sign vs exact MA).
+- Previous negative-correlation conclusions from heuristic MA should be treated as provisional / proxy-driven.
+- Research baseline must now prioritize exact MA (or validated proxy with quantified calibration error).
+
+**Immediate Next Actions:**
+1. Build a process-timeout exact MA batch runner (worker-process timeout/skip) to avoid rare stalls.
+2. Run exact MA on stratified QM9 subsets (by heavy-atom bins) and report effect sizes with CIs.
+3. Only then run full 130k exact MA (checkpointed), and treat heuristic outputs as auxiliary diagnostics.
+
+### 2026-03-03 (Session 8) — Exact-Only Refactor + Smart Batch Runner
+
+| ID | Type | Description |
+|:--:|:----:|:------------|
+| 03.27 | REFACTOR | Rebuilt `src/compute_assembly.py` as exact-only MA module (`compute_ma_exact`), removed heuristic execution paths and fake local placeholder API calls. |
+| 03.28 | REFACTOR | Updated pilot scripts (`run_pilot.py`, `run_pilot_v2.py`, `run_pilot_fast.py`) to use `AssemblyIndexBatcher(method='exact')`. |
+| 03.29 | REFACTOR | Replaced `run_scale_qm9.py` with exact-MA-first scalable runner: checkpoint/resume, per-molecule MA timeout, explicit success/error columns. |
+| 03.30 | ROBUSTNESS | Added worker-process mode with `maxtasksperchild` recycling and automatic serial fallback when multiprocessing semaphores are unavailable in restricted environments. |
+| 03.31 | TEST | Smoke-tested new scaler on QM9 (`n=300`): completed end-to-end, produced usable rows and correlation output without heuristic fallback. |
+
+**Current Execution Baseline:**
+- MA computation path is now **exact-first and exact-only in active scripts**.
+- Failures/timeouts are explicitly tracked (`ma_success`, `ma_error`) instead of silently replaced by heuristic values.
+- Full-scale runs should use `run_scale_qm9.py` with checkpointing and timeout parameters.
