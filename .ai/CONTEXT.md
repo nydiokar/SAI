@@ -1,6 +1,6 @@
 # Assembly Theory × Group Theory — Project Context
 
-**Repo:** `nydiokar/SAI`  **Branch:** `master`  **Last Updated:** 2026-02-20  **Status:** P0 Complete, P1 Blocked on Environment
+**Repo:** `nydiokar/SAI`  **Branch:** `master`  **Last Updated:** 2026-03-04  **Status:** P1 Full Exact-QM9 Run Complete; Post-Run Validation In Progress
 
 ---
 
@@ -38,180 +38,38 @@ Compute SAI (Thread 1) for the point groups appearing in real molecules (Thread 
 
 | Status | Task | Thread | Notes |
 |:------:|:-----|:------:|:------|
-| 🟢 | Scaffold repo structure | Both | ✓ All src/, notebooks/, config complete |
-| 🟢 | Verify toolchain (basic) | B6 | ✓ RDKit, pandas, scipy, scikit-learn work on Windows |
-| 🟢 | MA computation | B6 | ✓ Heuristic + API fallback functional |
-| 🟡 | Point group detection | B6 | **BLOCKED** — Windows RDKit 3D geometries unreliable (see assessment below) |
-| 🔵 | 100-molecule pilot | B6 | **RUN ONCE ENVIRONMENT FIXED** — code ready, awaiting proper geometry source |
-| ⚪ | Define SAI formally | T1 | Ready to start (independent of B6 geometry issue) |
-| ⚪ | Compute SAI for small groups | T1 | Ready to start after SAI definition |
+| 🟢 | Scaffold + portability fixes | Both | Cross-platform path fixes and WSL-ready pipeline complete |
+| 🟢 | Exact MA pipeline migration | B6 | Heuristic path removed from active runners; exact-only baseline active |
+| 🟢 | Full QM9 exact scale run | B6 | `run_scale_qm9.py` completed at `n=131970` with checkpointing |
+| 🔵 | Symmetry validity gate | B6 | Confirm point-group fidelity using trusted 3D geometries (not only RDKit-generated conformers) |
+| 🔵 | Definitive Bridge 6 claim package | B6 | Lock final correlation claim only after symmetry-validity check passes |
+| ⚪ | Define SAI formally | T1 | Ready to start in parallel with B6 reporting |
+| ⚪ | Compute SAI for observed point groups | T1 | Start after formal SAI definition |
 
 ---
 
-## NEXT STEPS: ENVIRONMENT MIGRATION (MANDATORY)
+## Current Snapshot (2026-03-04)
 
-### Phase A: Switch to Linux (Estimated: 30-60 minutes)
+### What Just Happened (Full Exact Run)
+- Completed full exact-scale execution in `run_scale_qm9.py` with checkpoint resume:
+  - `rows_total=131970`
+  - `rows_usable=126892` (96.15%)
+  - `rho=+0.103632`, `p=6.55037e-300`, `n=126892`
+  - `ma_success=131930`, `ma_fail=40` (0.03%)
+  - `sym_success=126932`, `sym_fail=5038` (3.82%)
+- Final output saved to `data/processed/qm9_exact_scaled_results_full.csv`.
 
-**Why Linux is required:**
-- Windows has build failures for pymatgen, ASE, and some chemistry packages
-- Scientific Python stack works better on Linux/Unix
-- Easier package management for computational chemistry
+### Evaluation
+- The run itself is operationally successful: near-complete MA success and stable throughput (~8.4 rows/s in final batches).
+- Compared with earlier heuristic-negative results, the exact pipeline now shows a **small positive** MA-vs-symmetry-order association on the full dataset.
+- MA reliability is now high (exact method). Symmetry validity has now been benchmarked directly against native QM9 geometries.
+- `DtypeWarning` at final CSV read is non-fatal and caused by mixed `ma_error` values (mostly empty + string error labels).
 
-**Setup instructions for Linux (Ubuntu/Debian recommended):**
-
-```bash
-# 1. Install system dependencies
-sudo apt-get update
-sudo apt-get install -y python3.10 python3.10-venv python3-pip \
-  build-essential gfortran libopenblas-dev liblapack-dev libgomp1
-
-# 2. Clone or sync repo
-cd ~/projects
-git clone https://github.com/nydiokar/SAI.git
-cd SAI
-
-# 3. Create venv
-python3.10 -m venv .venv
-source .venv/bin/activate
-
-# 4. Install dependencies (including pymatgen)
-pip install --upgrade pip setuptools wheel
-pip install -e ".[dev]"
-pip install pymatgen ase  # These will now work on Linux
-
-# 5. Verify
-python -c "from pymatgen.symmetry.analyzer import PointGroupAnalyzer; print('✓ pymatgen ready')"
-```
-
-### Phase B: Update Symmetry Detection (30 minutes)
-
-Once on Linux with pymatgen installed:
-
-```bash
-# 1. Update compute_symmetry.py to use pymatgen
-#    File: src/compute_symmetry_pymatgen.py (new file)
-#    - Use pymatgen's PointGroupAnalyzer (more reliable than RDKit)
-#    - Implement tolerance sensitivity
-#    - Keep fallback to our custom algorithm
-
-# 2. Test on reference molecules
-python -c "
-from src.compute_symmetry import compute_point_group
-result = compute_point_group('c1ccccc1', method='pymatgen')  # benzene
-print(result)  # Should output D6h, not C1
-"
-```
-
-### Phase C: Download QM9 with Pre-Optimized Geometries (30 minutes)
-
-```bash
-# 1. Download QM9 dataset (1.3GB)
-cd data/raw
-wget http://quantum-machine.org/datasets/qm9.tar.gz
-tar xzf qm9.tar.gz
-
-# 2. Update fetch_molecules.py to use real QM9
-#    (Currently uses PubChem API which is slow)
-#    New: parse .xyz files from QM9 directly
-
-# 3. Verify
-python -c "
-from src.fetch_molecules import get_qm9_sample
-df = get_qm9_sample(n=100, use_qm9=True)
-print(f'Loaded {len(df)} molecules from QM9')
-"
-```
-
-### Phase D: Re-run P1 Pilot with Proper Setup (10 minutes)
-
-```bash
-source .venv/bin/activate
-python run_pilot_v2.py
-
-# Expected output (with pymatgen + QM9):
-# Point group distribution:
-#   C1  : ~45%  (asymmetric)
-#   Cs  : ~30%  (mirror plane)
-#   C2v : ~10%
-#   Td  : ~5%
-#   D3h : ~5%
-#   D6h : ~5%   (benzene and analogs)
-#
-# Spearman correlation: ρ ≠ 0, p-value significant or not
-# (At least we'll get MEANINGFUL result with proper symmetries)
-```
-
-### Phase E: Thread 1 Can Start in Parallel (Independent)
-
-While you're setting up Linux, I can start Thread 1:
-- Define Symmetry Assembly Index (SAI) formally
-- Implement in GAP or SageMath
-- Compute for groups of order 1-100
-- This doesn't depend on the geometry issue
-
----
-
-## Critical Files to Review Before Switch
-
-- `src/compute_symmetry.py` — Will be replaced with `compute_symmetry_pymatgen.py`
-- `src/fetch_molecules.py` — Will be updated for real QM9
-- `run_pilot_v2.py` — Will run properly once geometries are fixed
-
----
-
-## Risk Assessment
-
-| Risk | Likelihood | Mitigation |
-|------|-----------|-----------|
-| Linux installation issues | LOW | Follow setup instructions; Ubuntu LTS recommended |
-| pymatgen build fails | LOW | Pre-compiled wheels available via pip on Linux |
-| QM9 download slow/fails | LOW | Resume available; ~1.3GB over 10-30 min depending on connection |
-| Code needs updates for Linux paths | LOW | Use absolute paths, already done in most places |
-
----
-
-<details>
-<summary><b>Legend</b></summary>
-
-**Status:** 🟢 Done  🔵 In Progress  🟡 Blocked  ⚪ Pending
-**Thread:** T1 = SAI/abstract, B6 = Bridge 6/empirical, Both = shared
-
-</details>
-
----
-
-## Current Status & Blocker
-
-### P0: COMPLETE ✓
-✓ All src/ modules fully implemented
-✓ Sanity check verified (00_sanity_check.ipynb)
-✓ MA computation working
-✓ Pipeline architecture sound and tested
-
-### P1: BLOCKED 🟡 on Environment Issue
-
-**Problem Identified:**
-RDKit's 3D coordinate generation (used for symmetry detection) produces **non-optimized, random conformations** that don't preserve chemical symmetry:
-- Expected: benzene → D6h, methane → Td, cyclopropane → D3h
-- Actual: almost everything → C1 or Cs (no symmetry detected)
-- Root cause: RDKit generates random 3D geometries; doesn't optimize to symmetric states
-
-**Evidence:**
-- Ran V2 pilot with 45 hand-curated molecules (benzene, methane, cyclohexane, etc.)
-- Got 33 C1 + 11 Cs (only 2 point groups)
-- Expected: 15+ different groups (Td, D3h, D6h, C2v, etc.)
-- Correlation result: ρ = -0.033, p = 0.83 (meaningless due to low data quality)
-
-**This is NOT a code bug** — it's a data input problem. The roadmap anticipated this:
-> "RDKit doesn't natively output Schoenflies symbols | Use **pymatgen PointGroupAnalyzer** or install better tools"
-> "Symmetry detection sensitive to tolerance | Use **pre-computed QM9 with proper geometries**"
-
-### Solution: Switch to Linux + Install Proper Tools
-
-We need:
-1. **pymatgen** (or ASE) — proper symmetry detection from 3D structures
-2. **Pre-optimized geometries** — QM9 database with DFT-optimized 3D structures
-3. **Linux environment** — Windows has build issues with these packages
+### Immediate Next Steps (Priority Order)
+1. **Lock Bridge 6 wording with explicit caveat:** symmetry is stable for directional/statistical claims; residual mismatch is concentrated in `C1` vs `Cs` boundary cases.
+2. **For publication-grade final table:** regenerate final correlation once using native-geometry symmetry labels (reuse exact MA already computed; no need to rerun exact MA end-to-end).
+3. **Declare completion criteria:** if native-geometry rerun preserves positive small effect (`rho` direction unchanged, small delta), mark Bridge 6 empirical phase complete.
+4. **Move to convergence:** map observed point groups to Thread-1 SAI and test SAI-vs-MA mediation hypothesis.
 
 ---
 
@@ -327,3 +185,58 @@ We need:
 - MA computation path is now **exact-first and exact-only in active scripts**.
 - Failures/timeouts are explicitly tracked (`ma_success`, `ma_error`) instead of silently replaced by heuristic values.
 - Full-scale runs should use `run_scale_qm9.py` with checkpointing and timeout parameters.
+
+### 2026-03-04 (Session 9) — Full Exact-QM9 Completion (131,970 Rows)
+
+| ID | Type | Description |
+|:--:|:----:|:------------|
+| 03.32 | SCALE | Completed resumed final batches in `run_scale_qm9.py` (from `101,500/101,970` pending to `101,970/101,970` pending complete). |
+| 03.33 | RESULT | Final exact run summary: `rows_total=131970`, `rows_usable=126892`, Spearman `ρ=+0.103632`, `p=6.55037e-300`, `n=126892`. |
+| 03.34 | RESULT | Status counts: `ma_success=131930`, `ma_fail=40`; `sym_success=126932`, `sym_fail=5038`. |
+| 03.35 | DIAG | `ma_error` composition (40 fails): `hard_timeout=20`, `child_panic_canonize_unwrap=17`, `invalid_or_overflow=3`. |
+| 03.36 | DIAG | Observed pandas warning on final read: mixed-type `ma_error` column; non-fatal and expected from nullable/error-string field mix. |
+| 03.37 | DATA | Full exact output persisted to `data/processed/qm9_exact_scaled_results_full.csv`. |
+
+**Interpretation Update:**
+- Full exact-scale evidence now supports a **small positive** monotonic association between symmetry order and exact MA on usable QM9 rows.
+- Prior heuristic-negative direction is now formally superseded by exact-only results.
+- Residual uncertainty is now concentrated in **symmetry-label validity**, not in the exact-MA compute path.
+
+**Execution Next Actions:**
+1. Execute symmetry-validity benchmark against trusted geometry-derived labels.
+2. Apply explicit pass/fail gate for “definitive Bridge 6” status based on agreement + correlation stability.
+3. Finalize write-up wording only after gate result; otherwise mark current run as provisional and rerun with corrected symmetry path.
+
+### 2026-03-04 (Session 10) — Symmetry Validity Gate (Native QM9 Geometry, 10k)
+
+| ID | Type | Description |
+|:--:|:----:|:------------|
+| 03.38 | SCRIPT | Rebuilt `scripts/symmetry_validity_gate.py` to use index-aligned native QM9 SDF geometries with alignment QA and tolerance-stability diagnostics. |
+| 03.39 | VALID | Alignment check passed strongly: `126792/126892` usable rows aligned by `mol_index` (`99.92%`). |
+| 03.40 | RESULT | Primary tolerance (`0.5`) strict metrics: label match `0.9020`, order match `0.8955`, rho current `0.1063`, rho trusted `0.0955`, rho delta `0.0109`. |
+| 03.41 | RESULT | Strict gate status: **FAIL** (fails only on high bar for exact order match and order stability across tolerances). |
+| 03.42 | RESULT | Practical stability metrics (C1/Cs ambiguity-aware): coarse label match `0.9952`, coarse order match `0.9965`, coarse tolerance stability `0.9949` => **practical gate PASS**. |
+| 03.43 | ANALYSIS | Main disagreement mass is `C1 <-> Cs`, i.e., low-symmetry boundary sensitivity, not broad high-symmetry collapse. Directional effect remains positive and stable. |
+
+**Interpretation Update:**
+- Symmetry signal is sufficiently stable for the Bridge 6 directional claim (small positive association) when accounting for known `C1/Cs` boundary ambiguity.
+- Remaining uncertainty is mostly categorical granularity at the low-symmetry edge, not a sign flip or full-method invalidation.
+
+**Decision (Current):**
+1. Treat Bridge 6 as **scientifically supportable with explicit C1/Cs caveat** now.
+2. For final manuscript table, run one native-geometry symmetry pass across the full exact-MA rows and report that as canonical final result.
+
+### 2026-03-04 (Session 11) — Full Native-Geometry Symmetry Pass (All Aligned Rows)
+
+| ID | Type | Description |
+|:--:|:----:|:------------|
+| 03.44 | RUN | Executed full native-geometry gate run using `scripts/symmetry_validity_gate.py` with `--n 0 --tolerances 0.5` on all aligned exact-MA rows. |
+| 03.45 | VALID | Alignment remained strong at full scale: `126792/126892` (`99.92%`). |
+| 03.46 | RESULT | Full-scale strict metrics (`tol=0.5`): exact label match `0.9027`, order match `0.8934`, rho current `0.10422`, rho trusted `0.09432`, rho delta `0.00990`. |
+| 03.47 | RESULT | Full-scale practical stability (C1/Cs-aware): coarse label match `0.9964`, coarse order match `0.9975`; practical gate **PASS**. |
+| 03.48 | INTERP | Positive association remains after native-geometry validation, with similar small effect size; remaining mismatch is concentrated in low-symmetry C1/Cs boundary. |
+
+**Bridge 6 Status After Full Native Pass:**
+- Directional claim is stable and supported: higher symmetry order associates with slightly higher exact MA (small positive effect).
+- Strict categorical identity of low-symmetry labels (`C1` vs `Cs`) remains tolerance-sensitive; this should be reported as a caveat, not treated as result-invalidating.
+- Empirical Bridge 6 phase can be considered **complete for decision/reporting**, with canonical numbers sourced from native-geometry validated outputs.

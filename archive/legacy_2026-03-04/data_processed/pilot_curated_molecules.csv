@@ -1,0 +1,60 @@
+point_group,order,max_rotation_order,confidence,tolerance_used,method,conformer_index,smiles,name,assembly_index
+C1,1,1,0.6900000000000001,0.3,pymatgen,0,CC(C)Cc1ccc(cc1)C(C)C(=O)O,ibuprofen,7.54
+C1,1,1,0.6900000000000001,0.3,pymatgen,0,CC(=O)Nc1ccc(O)cc1,paracetamol,6.82
+C1,1,1,0.6900000000000001,0.3,pymatgen,0,CC(C)CC(C)(C)O,asymmetric alcohol,5.58
+Cs,2,1,0.73,0.3,pymatgen,0,C1CCCC(C1)(C)O,cyclopentanol,6.96
+Cs,2,1,0.73,0.3,pymatgen,0,O=C(O)c1ccccc1,benzoic acid,6.41
+Cs,2,1,0.73,0.3,pymatgen,0,Cc1ccccc1O,o-cresol,6.5
+C1,1,1,0.6900000000000001,0.3,pymatgen,0,Cc1ccc(O)cc1,p-cresol,6.5
+C2h,4,2,0.81,0.3,pymatgen,0,c1ccc(cc1)C(=O)C(=O)c2ccccc2,benzil,8.7
+C2h,4,2,0.81,0.3,pymatgen,0,CC(C)C(C)C,"2,3-dimethylbutane",5.32
+C2v,4,2,0.81,0.3,pymatgen,0,O,water,2.58
+C3v,6,3,0.89,0.3,pymatgen,0,C(Cl)(Cl)Cl,chloroform,3.32
+C3v,6,3,0.89,0.3,pymatgen,0,C(F)(F)F,fluoroform,3.32
+C2v,4,2,0.81,0.3,pymatgen,0,CC(=O)C,acetone,4.32
+Cs,2,1,0.73,0.3,pymatgen,0,C1=CC=C(C=C1)C(=C2C=CC=CC2)C3=CC=CC=C3,triphenylmethanol base,10.63
+C3v,6,3,0.89,0.3,pymatgen,0,C(C)(C)C,neopentane,4.81
+Td,24,12,0.97,0.3,pymatgen,0,C,methane,3.32
+Td,24,12,0.97,0.3,pymatgen,0,C,methane,3.32
+Td,24,12,0.97,0.3,pymatgen,0,[CH4],methane (explicit),3.32
+Td,24,12,0.97,0.3,pymatgen,0,C(F)(F)(F)F,carbon tetrafluoride,3.32
+Td,24,12,0.97,0.3,pymatgen,0,C(Cl)(Cl)(Cl)Cl,carbon tetrachloride,3.32
+Td,24,12,0.97,0.3,pymatgen,0,CC(C)(C)C,neopentane,5.09
+D6h,24,12,0.97,0.3,pymatgen,0,c1ccccc1,benzene,6.08
+D2,4,4,0.81,0.3,pymatgen,0,c1ccccc1c2ccccc2,biphenyl,8.46
+D6h,24,12,0.97,0.3,pymatgen,0,C1=CC=CC=C1,benzene (explicit),6.08
+C2v,4,2,0.81,0.3,pymatgen,0,c1cc(Cl)cc(Cl)c1,"1,3,5-trichlorobenzene",6.08
+C2v,4,2,0.81,0.3,pymatgen,0,c1cc(O)cc(O)c1,resorcinol,6.31
+Cs,2,1,0.73,0.3,pymatgen,0,c1ccc(O)cc1,phenol,6.2
+D3d,12,6,0.97,0.3,pymatgen,3,C1CCCCC1,cyclohexane,6.67
+D2,2,2,0.73,0.3,pymatgen,0,C1CCCC1,cyclopentane,6.41
+D2d,8,4,0.97,0.3,pymatgen,0,C1CCC1,cyclobutane,6.08
+D3h,12,6,0.97,0.3,pymatgen,0,C1CC1,cyclopropane,5.67
+C2,2,2,0.73,0.3,pymatgen,0,c1ccc(O)c(O)c1,"catechol (1,2-dihydroxybenzene)",6.31
+Cs,2,1,0.73,0.3,pymatgen,0,c1ccc(O)c(O)c1O,pyrogallol,6.41
+Cs,2,1,0.73,0.3,pymatgen,0,c1ccccc1C=O,benzaldehyde,6.31
+Cs,2,1,0.73,0.3,pymatgen,0,CC(=O)c1ccccc1,acetophenone,6.59
+C2,2,2,0.73,0.3,pymatgen,0,O=C(c1ccccc1)c2ccccc2,benzophenone,8.58
+Td,24,12,0.97,0.3,pymatgen,0,C,methane,3.32
+Td,24,12,0.97,0.3,pymatgen,0,C,methane,3.32
+D3d,12,6,0.97,0.3,pymatgen,0,CC,ethane,4.0
+C2v,4,2,0.81,0.3,pymatgen,0,CCC,propane,4.46
+C3v,6,3,0.89,0.3,pymatgen,0,CC(C)C,isobutane,4.81
+C2h,4,2,0.81,0.3,pymatgen,0,CCCC,butane,4.81
+C1,1,1,0.6900000000000001,0.3,pymatgen,0,CC(C)CC,2-methylbutane,5.09
+C2,2,2,0.73,0.3,pymatgen,0,c1ccccc1c2ccccc2c3ccccc3,triphenylmethane,10.5
+C2v,4,2,0.81,0.3,pymatgen,0,c1ccc2c(c1)ccc3c2cccc3,anthracene,10.08
+D2h,8,4,0.97,0.3,pymatgen,0,c1cc2ccccc2cc1,naphthalene,8.17
+C2v,4,2,0.81,0.3,pymatgen,0,c1cnccc1,pyridine,5.96
+C2v,4,2,0.81,0.3,pymatgen,0,c1ccncc1,pyrazine,5.96
+C2v,4,2,0.81,0.3,pymatgen,0,c1ccoc1,furan,5.67
+C1,1,1,0.6900000000000001,0.3,pymatgen,0,CC(C)C(C)C(C)C,"2,3,4-trimethylpentane",5.7
+C1,1,1,0.6900000000000001,0.3,pymatgen,0,C1=C(C=CC=C1)C=CC(=O)C,cinnamaldehyde,6.89
+Cs,2,1,0.73,0.3,pymatgen,0,c1ccccc1N,aniline,6.31
+C2,2,2,0.73,0.3,pymatgen,0,c1ccccc1Nc2ccccc2,diphenylamine,8.58
+Cs,2,1,0.73,0.3,pymatgen,0,c1ccccc1C(=O)O,benzoic acid,6.41
+Cs,2,1,0.73,0.3,pymatgen,0,c1ccc(C(=O)O)cc1,4-carboxybiphenyl,6.41
+C2,2,2,0.73,0.3,pymatgen,0,c1ccccc1Oc2ccccc2,diphenyl ether,8.52
+Cs,2,1,0.73,0.3,pymatgen,0,CCOc1ccccc1,phenetole,6.75
+C1,1,1,0.6900000000000001,0.3,pymatgen,0,CC(=O)Oc1ccccc1,phenyl acetate,6.67
+Cs,2,1,0.73,0.3,pymatgen,0,c1ccccc1C(=O)Oc2ccccc2,phenyl benzoate,8.64
